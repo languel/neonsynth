@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Deserialize;
 use crate::airway::decimator::Decimator;
 use crate::airway::network::{AirwayNetwork, Area, NoiseSpec, PortSpec, Tube, TubeSpec};
-use crate::math::{exp, sin, tanh, PI};
+use crate::math::{cbrt, exp, pow, sin, sqrt, tanh, PI};
 use crate::physics::{C_SOUND, CM_H2O, WALL_NASAL, WALL_SOFT, WALL_TRACHEA, WallParams};
 use crate::sources::glottis::ParametricGlottis;
 use crate::sources::syrinx::SyrinxLabia;
@@ -72,6 +72,7 @@ pub struct StudioVoice {
     net: AirwayNetwork,
     sources: Vec<Source>,
     fs: f64,
+    factor: usize,
     dec: Decimator,
     pitch_ratio: f64,
     gate_target: f64,
@@ -106,7 +107,23 @@ impl StudioVoice {
             || !finite_between(d.pulse_depth, 0.0, 1.0) || !finite_between(d.pulse_rate, 0.1, 30.0) || !finite_between(d.output_gain, 0.02, 10.0)
         { return Err("Invalid instrument settings".into()); }
         if d.parts.is_empty() || d.parts.len() > 32 || d.links.len() > 64 { return Err("An instrument supports up to 32 parts and 64 connections".into()); }
-        let internal_fs = fs * 2.0;
+        // Use the least oversampling that satisfies the FDTD CFL limit for the shortest
+        // physical element, and enough resolution for the source's initial pitch. This keeps
+        // independent band voices practical without changing the original Chimera voices.
+        let mut smallest = f64::INFINITY;
+        let mut highest = 0.0_f64;
+        for part in &d.parts {
+            match part {
+                Part::Tube { length, .. } if length.is_finite() && *length > 0.0 => smallest = smallest.min(*length),
+                Part::Cavity { volume, .. } if volume.is_finite() && *volume > 0.0 => smallest = smallest.min(cbrt(*volume)),
+                Part::Source { pitch, .. } if pitch.is_finite() => highest = highest.max(*pitch),
+                _ => {}
+            }
+        }
+        let factor = [1_usize, 2, 4, 8].into_iter()
+            .find(|m| smallest >= C_SOUND / (fs * *m as f64 * 0.93) && highest <= fs * *m as f64 * 0.12)
+            .ok_or("The instrument is too small for this sample rate")?;
+        let internal_fs = fs * factor as f64;
         let mut net = AirwayNetwork::new(internal_fs);
         let mut parts = HashMap::new();
         let mut nodes: HashMap<&str, (usize, usize)> = HashMap::new();
@@ -200,10 +217,11 @@ impl StudioVoice {
         }
         if visited.len() != d.parts.len() { return Err("All parts must be connected to the instrument".into()); }
         net.finalize();
+        if net.check_cfl() > 0.93000001 { return Err("The airway is too finely divided for a stable simulation".into()); }
         net.set_noise_sources(&noise);
         net.snap_to_targets();
         Ok(Self {
-            net, sources, fs: internal_fs, dec: Decimator::new(2), pitch_ratio: 1.0, gate_target: 0.0, gate: 0.0,
+            net, sources, fs: internal_fs, factor, dec: Decimator::new(factor), pitch_ratio: 1.0, gate_target: 0.0, gate: 0.0,
             attack: d.attack, release: d.release, vibrato: d.vibrato, vibrato_rate: d.vibrato_rate, pulse_depth: d.pulse_depth, pulse_rate: d.pulse_rate, output_gain: d.output_gain, phase: 0.0, pulse_phase: 0.0,
             control_left: 0, dc_x: 0.0, dc_y: 0.0, dc_coef: exp(-2.0 * PI * 20.0 / fs), rms: 0.0,
         })
@@ -219,12 +237,12 @@ impl StudioVoice {
         let tau = if self.gate_target > self.gate { self.attack } else { self.release };
         self.gate += (self.gate_target - self.gate) * (1.0 - exp(-dt / tau));
         self.phase = (self.phase + 2.0 * PI * self.vibrato_rate * dt) % (2.0 * PI);
-        let vib = 2.0_f64.powf(self.vibrato * sin(self.phase) / 1200.0);
+        let vib = pow(2.0, self.vibrato * sin(self.phase) / 1200.0);
         self.pulse_phase = (self.pulse_phase + 2.0 * PI * self.pulse_rate * dt) % (2.0 * PI);
         let pulse = 1.0 - self.pulse_depth + self.pulse_depth * (0.5 + 0.5 * sin(self.pulse_phase));
         for s in &mut self.sources {
             self.net.set_fixed_pressure(s.pressure_node, s.pressure * CM_H2O * self.gate * pulse);
-            let pitch = (s.pitch * self.pitch_ratio * vib).clamp(20.0, 8000.0);
+            let pitch = (s.pitch * self.pitch_ratio * vib).clamp(20.0, 8000.0_f64.min(self.fs * 0.12));
             match &mut s.valve {
                 Valve::Folds(g) => {
                     g.params.f0 = pitch;
@@ -246,7 +264,7 @@ impl StudioVoice {
     pub fn render(&mut self, out: &mut [f32]) {
         let mut sum = 0.0;
         for sample in out.iter_mut() {
-            for _ in 0..2 {
+            for _ in 0..self.factor {
                 if self.control_left == 0 { self.control(); }
                 self.control_left -= 1;
                 for s in &mut self.sources {
@@ -273,6 +291,6 @@ impl StudioVoice {
                 }
             }
         }
-        self.rms = (sum / out.len().max(1) as f64).sqrt();
+        self.rms = sqrt(sum / out.len().max(1) as f64);
     }
 }

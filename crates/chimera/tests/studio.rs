@@ -56,3 +56,15 @@ fn air_source_radiates_even_into_a_single_node_chamber() {
     let rms = (out[12000..].iter().map(|x| x*x).sum::<f32>() / 12000.0).sqrt();
     assert!(rms > 1e-6, "steady turbulent air must be audible: {rms}");
 }
+
+#[test]
+fn short_parts_are_stable_at_supported_device_rates() {
+    let small = design("folds", 1.0).replace("\"length\":24", "\"length\":0.6");
+    for fs in [16000.0, 44100.0, 48000.0, 96000.0] {
+        let mut voice = StudioVoice::from_json(fs, small.as_bytes()).unwrap();
+        voice.set(1.0, 1.0);
+        let mut out = vec![0.0; 4096];
+        voice.render(&mut out);
+        assert!(out.iter().all(|x| x.is_finite()), "{fs} Hz");
+    }
+}
