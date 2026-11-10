@@ -53,7 +53,7 @@ jobs:
             base64 -w 0 "$file" > /tmp/blob-base64
             jq -n --rawfile content /tmp/blob-base64 '{content:$content,encoding:"base64"}' > /tmp/blob-request.json
             sha=$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/blobs" --input /tmp/blob-request.json --jq .sha)
-            echo "BOOTSTRAP_${item^^}_SHA=$sha"
+            echo "::notice title=BOOTSTRAP_${item^^}::$sha"
           done
       - uses: actions/upload-pages-artifact@v5
         with:
