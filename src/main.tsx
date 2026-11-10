@@ -1,11 +1,31 @@
-import { createRoot } from 'react-dom/client';
-import '@fontsource/dm-sans/400.css';
-import '@fontsource/dm-sans/500.css';
-import '@fontsource/dm-sans/600.css';
-import '@fontsource/dm-sans/700.css';
-import '@fontsource/ibm-plex-mono/400.css';
-import '@fontsource/ibm-plex-mono/500.css';
-import App from './App';
-import './styles.css';
+/**
+ * Entry: load the engine (wasm) first — UI modules call into it as they load (Sing mode builds
+ * its syllables at import time) — then import and render the app. A failed load can be retried.
+ */
+import "./ui/styles.css";
+import { initChimera } from "./wasm/chimera.ts";
 
-createRoot(document.getElementById('root')!).render(<App/>);
+const root = document.getElementById("root")!;
+
+async function boot(): Promise<void> {
+  try {
+    await initChimera();
+  } catch (err) {
+    root.replaceChildren();
+    const box = document.createElement("div");
+    box.className = "boot-error";
+    const msg = document.createElement("p");
+    msg.textContent = `The voice engine could not load: ${err instanceof Error ? err.message : String(err)}`;
+    const retry = document.createElement("button");
+    retry.className = "primary";
+    retry.textContent = "Try again";
+    retry.onclick = () => void boot();
+    box.append(msg, retry);
+    root.append(box);
+    return;
+  }
+  const { mount } = await import("./ui/mount.tsx");
+  mount(root);
+}
+
+void boot();

@@ -1,6 +1,11 @@
 node_modules/
 dist/
+out/
+target/
+*.wav
 *.tsbuildinfo
 .DS_Store
+src/wasm/chimera.wasm
+public/shows/
 test-results/
 playwright-report/

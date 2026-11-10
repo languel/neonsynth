@@ -1,26 +1,21 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig } from "@playwright/test";
 
-const port = process.env.PLAYWRIGHT_TEST_PORT ?? '5173';
-const baseURL = `http://127.0.0.1:${port}${process.env.GITHUB_ACTIONS ? '/neonsynth/' : '/'}`;
+const port = process.env.PLAYWRIGHT_TEST_PORT ?? "5317";
+const baseURL = `http://127.0.0.1:${port}${process.env.GITHUB_ACTIONS ? "/neonsynth/" : "/"}`;
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
 export default defineConfig({
-  testDir: './e2e',
-  timeout: 35_000,
-  reporter: 'list',
+  testDir: "./e2e",
+  timeout: 45_000,
   workers: 1,
+  reporter: "list",
   use: {
     baseURL,
-    browserName: 'chromium',
+    browserName: "chromium",
     headless: true,
     launchOptions: {
       ...(executablePath ? { executablePath } : {}),
-      args: ['--autoplay-policy=no-user-gesture-required', ...(executablePath ? ['--no-sandbox', '--no-zygote', '--disable-dev-shm-usage'] : [])],
+      args: ["--autoplay-policy=no-user-gesture-required", ...(executablePath ? ["--no-sandbox", "--no-zygote", "--disable-dev-shm-usage"] : [])],
     },
   },
-  webServer: {
-    command: `npm run dev -- --port ${port} --strictPort`,
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  webServer: { command: `npm run dev -- --port ${port} --strictPort`, url: baseURL, reuseExistingServer: !process.env.CI, timeout: 60_000 },
 });

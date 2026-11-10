@@ -1,28 +1,38 @@
 {
   "name": "neonsynth",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "dev:full": "npm run wasm && vite --host 0.0.0.0",
+    "wasm": "cargo build -p chimera-wasm --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/chimera_wasm.wasm src/wasm/chimera.wasm",
+    "build": "npm run wasm && npm run build:site",
+    "build:site": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test tests/*.test.js",
+    "test": "npm run wasm && cargo test --workspace && bun test tests",
+    "test:wasm": "bun test tests",
+    "typecheck": "tsc --noEmit",
+    "lint:layout": "bun tools/layout-lint.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@fontsource/dm-sans": "^5.2.6",
-    "@fontsource/ibm-plex-mono": "^5.2.6",
-    "lucide-react": "^0.468.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.186.1",
+    "zustand": "5.0.16"
   },
   "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.186.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "playwright-core": "1.64.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
     "@playwright/test": "^1.65.0",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.7.3",
-    "vite": "^6.1.0"
+    "bun": "1.4.4"
   }
 }
