@@ -21,6 +21,9 @@ import type { Mode } from "./store.ts";
 import type { BodyName } from "../worklet/protocol.ts";
 import { BodyPad } from "./components/BodyPad.tsx";
 import { bodyLabel, presetOf, PRESETS } from "./body.ts";
+import { Builder } from "../studio/Builder.tsx";
+import { BandPage } from "../studio/Band.tsx";
+import { studioAudio } from "../studio/audio.ts";
 
 // three.js only loads when the 3D view is first shown
 const AnatomyView3D = lazy(() => import("./components/AnatomyView3D.tsx").then((m) => ({ default: m.AnatomyView3D })));
@@ -64,9 +67,11 @@ function TopBar() {
           { value: "sing", label: "Sing" },
           { value: "bestiary", label: "Bestiary" },
           { value: "beatbox", label: "Beatbox" },
+          { value: "build", label: "Build" },
+          { value: "band", label: "Band" },
         ]}
       />
-      {mode !== "bestiary" && (
+      {mode !== "bestiary" && mode !== "build" && mode !== "band" && (
         <div className="body-control">
           <Segmented<BodyName>
             label="Body"
@@ -87,7 +92,7 @@ function TopBar() {
           <input type="range" min={0} max={1} step={0.01} value={volume} onChange={(e) => setVolume(Number(e.target.value))} style={{ "--pos": `${volume * 100}%` } as React.CSSProperties} />
         </label>
         {started ? (
-          <span className="load" title="Share of the audio thread's time budget used by the simulation">
+          mode === "build" || mode === "band" ? <span className="load">Studio ready</span> : <span className="load" title="Share of the audio thread's time budget used by the simulation">
             Engine load {Math.round(load * 100)} %
           </span>
         ) : (
@@ -227,13 +232,16 @@ export function App() {
 
 function Wall() {
   const mode = useStore((s) => s.mode);
+  const volume = useStore((s) => s.volume);
+  useEffect(() => { studioAudio.stop(); }, [mode]);
+  useEffect(() => { studioAudio.setVolume(volume); }, [volume]);
   return (
     <div className={`app text-colors mode-${mode}`}>
       <TopBar />
-      <main className={`wall wall-${mode}`}>
+      {mode === "build" ? <Builder /> : mode === "band" ? <BandPage /> : <main className={`wall wall-${mode}`}>
         <LeftScreen />
         {mode === "play" ? <PlayRight /> : mode === "speak" ? <SpeakRight /> : mode === "sing" ? <SingRight /> : mode === "beatbox" ? <BeatboxRight /> : <BestiaryRight />}
-      </main>
+      </main>}
     </div>
   );
 }

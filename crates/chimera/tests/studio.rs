@@ -68,3 +68,27 @@ fn short_parts_are_stable_at_supported_device_rates() {
         assert!(out.iter().all(|x| x.is_finite()), "{fs} Hz");
     }
 }
+
+#[test]
+fn physical_parameters_and_behaviors_change_the_rendered_signal() {
+    fn render(json: &str) -> Vec<f32> {
+        let mut voice = StudioVoice::from_json(48000.0, json.as_bytes()).unwrap();
+        voice.set(1.0, 1.0);
+        let mut out = vec![0.0; 12000]; voice.render(&mut out); out
+    }
+    let base = design("folds", 1.0);
+    let a = render(&base);
+    for (label, changed) in [
+        ("pressure", base.replace("\"pressure\":12", "\"pressure\":24")),
+        ("strength", base.replace("\"strength\":0.5", "\"strength\":0.9")),
+        ("tension", base.replace("\"tension\":0.5", "\"tension\":0.1")),
+        ("pitch", base.replace("\"pitch\":220", "\"pitch\":330")),
+        ("tube length", base.replace("\"length\":24", "\"length\":40")),
+        ("pulse", base.replace("\"pulseDepth\":0", "\"pulseDepth\":0.8")),
+        ("vibrato", base.replace("\"vibrato\":0", "\"vibrato\":90")),
+    ] {
+        let b = render(&changed);
+        let diff = a.iter().zip(&b).map(|(x,y)| (x-y).abs() as f64).sum::<f64>() / a.len() as f64;
+        assert!(diff > 1e-5, "{label} must affect the physical sound (difference {diff})");
+    }
+}

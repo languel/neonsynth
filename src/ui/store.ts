@@ -10,7 +10,7 @@ import { singNoteOn, singNoteOff, stopSinging } from "./singing.ts";
 import { stopSpeaking } from "./speech.ts";
 import { connectMidi, disconnectMidi, type MidiStatus } from "./midi.ts";
 
-export type Mode = "play" | "speak" | "sing" | "bestiary" | "beatbox";
+export type Mode = "play" | "speak" | "sing" | "bestiary" | "beatbox" | "build" | "band";
 
 export interface BeatState {
   steps: (BeatStep | null)[];
@@ -172,7 +172,7 @@ export const useStore = create<State>((set, get) => ({
     }
     if (prev === "sing") stopSinging();
     // speech and song breathe by themselves: a held breath would drone under them
-    if (m === "speak" || m === "sing") set({ hold: false });
+    if (m === "speak" || m === "sing" || m === "build" || m === "band") set({ hold: false });
     if (m === "beatbox") {
       // a beatboxer waits with the jaw nearly closed; the sounds bring their own breath
       set({ hold: false });
