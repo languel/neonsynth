@@ -4,7 +4,7 @@ import { KIND_LABELS, newPart, sizeFromOutline, type Instrument, type Part, type
 
 export type CanvasTool = 'select' | 'draw' | 'connect';
 export const artworkUrl = (artwork: Instrument['artwork']) => artwork === 'blank' ? '' : `${import.meta.env.BASE_URL}${artwork}-studio.webp`;
-const partIcon = (kind: PartKind) => kind === 'source' ? Wind : kind === 'resonator' ? CircleDot : kind === 'tube' ? Waves : kind === 'modulator' ? RotateCcw : ArrowUpRight;
+const partIcon = (kind: PartKind) => kind === 'source' ? Wind : kind === 'resonator' ? CircleDot : kind === 'tube' ? Waves : kind === 'modulator' ? RotateCcw : kind === 'body' ? Pencil : ArrowUpRight;
 
 interface Props {
   instrument: Instrument;

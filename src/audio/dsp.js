@@ -185,14 +185,16 @@ export class PhysicalVoice {
           case 'air': value = (0.65 + this.random() * p.breathiness * 0.45) * p.pressure * carrier; break;
           case 'syrinx': value = ((state.syrinx ? state.syrinx.next() : 0) - 0.25) * 1.4 * p.pressure * carrier; break;
           case 'reed': value = Math.tanh((Math.sin(TAU * state.phase) + 0.38 * Math.sin(TAU * state.phase * 2)) * (1.4 + p.tension * 3)) * p.pressure * carrier; break;
-          case 'jet': value = (Math.sin(TAU * state.phase) * (0.9 - p.breathiness * .25) + this.random() * p.breathiness * 0.24) * p.pressure * carrier; break;
+          case 'jet': value = (Math.sin(TAU * state.phase) * (0.9 - p.breathiness * .25) + Math.sin(TAU * state.phase * 2) * p.tension * .18 + this.random() * p.breathiness * 0.24) * p.pressure * carrier; break;
           case 'string': {
             const buffer = state.string, idx = state.stringIndex, next = (idx + 1) % buffer.length;
             value = buffer[idx] * p.pressure * carrier;
-            buffer[idx] = (buffer[idx] + buffer[next]) * 0.5 * (0.992 + (1 - p.damping) * 0.007);
+            // Tension alters the string's high-frequency loss; damping controls its decay.
+            const blend = .25 + p.tension * .5;
+            buffer[idx] = (buffer[idx] * (1 - blend) + buffer[next] * blend) * (0.975 + (1 - p.damping) * 0.024);
             state.stringIndex = next; break;
           }
-          case 'strike': value = (Math.sin(TAU * state.phase) * Math.exp(-age * (1.7 + p.damping * 4)) + this.random() * Math.exp(-age * 32) * .3) * p.pressure * carrier; break;
+          case 'strike': value = ((Math.sin(TAU * state.phase) + Math.sin(TAU * state.phase * 2.7) * p.tension * .45) * Math.exp(-age * (1.7 + p.damping * 4)) + this.random() * Math.exp(-age * 32) * .3) * p.pressure * carrier; break;
           case 'glottis':
           default: {
             const oq = clamp(.72 - p.tension * .22, .25, .98);

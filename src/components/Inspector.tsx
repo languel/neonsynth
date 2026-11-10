@@ -30,6 +30,7 @@ export function Inspector({ part, parts, connections, onChange, onDelete, onRemo
         {part.kind === 'source' && <>
           <Slider label="Pressure" value={part.params.pressure} onChange={(v) => setParam('pressure', v)} hint="The energy driving this part"/>
           {part.excitation !== 'air' && <Slider label="Tension" value={part.params.tension} onChange={(v) => setParam('tension', v)}/>}
+          {(part.excitation === 'string' || part.excitation === 'strike') && <Slider label="Damping" value={part.params.damping} onChange={(v) => setParam('damping', v)}/>}
           {(part.excitation === 'air' || part.excitation === 'glottis' || part.excitation === 'jet') && <Slider label="Breathiness" value={part.params.breathiness} onChange={(v) => setParam('breathiness', v)}/>}
           {part.excitation !== 'air' && <Slider label="Pitch offset" value={part.params.pitch} onChange={(v) => setParam('pitch', v)} bipolar/>}
         </>}

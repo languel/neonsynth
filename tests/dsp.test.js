@@ -47,3 +47,19 @@ test('disconnected or cyclic networks cannot produce sound', () => {
   assert.equal(compileGraph(cyclic), null);
   assert.equal(energy(render(cyclic)), 0);
 });
+
+
+test('the exposed source tension and damping controls affect the sound', () => {
+  for (const source of ['glottis', 'syrinx', 'reed', 'jet', 'string', 'strike']) {
+    const low = instrument(source), high = instrument(source);
+    low.parts[1].params.tension = .15; high.parts[1].params.tension = .9;
+    const a = render(low), b = render(high);
+    assert.ok(energy(a.map((x, i) => x - b[i])) > .00001, `${source} tension should change its sound`);
+  }
+  for (const source of ['string', 'strike']) {
+    const low = instrument(source), high = instrument(source);
+    low.parts[1].params.damping = .1; high.parts[1].params.damping = .9;
+    const a = render(low), b = render(high);
+    assert.ok(energy(a.map((x, i) => x - b[i])) > .00001, `${source} damping should change its sound`);
+  }
+});
