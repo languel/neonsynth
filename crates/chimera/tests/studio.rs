@@ -42,3 +42,17 @@ fn invalid_or_disconnected_graphs_are_rejected() {
     let no_outlet = design("folds", 1.0).replace(r#",{"a":{"id":"t","end":1},"b":{"id":"o","end":0}}"#, "");
     assert!(StudioVoice::from_json(48000.0, no_outlet.as_bytes()).is_err());
 }
+
+#[test]
+fn air_source_radiates_even_into_a_single_node_chamber() {
+    let json = r#"{"basePitch":220,"attack":0.01,"release":0.05,"vibrato":0,"vibratoRate":5,"pulseDepth":0,"pulseRate":4,"outputGain":1,
+      "parts":[{"kind":"source","id":"s","source":"air","pitch":220,"pressure":30,"strength":0.5,"tension":0.5},
+        {"kind":"cavity","id":"c","volume":1,"wall":"rigid"},{"kind":"outlet","id":"o"}],
+      "links":[{"a":{"id":"s","end":0},"b":{"id":"c","end":0}},{"a":{"id":"c","end":0},"b":{"id":"o","end":0}}]}"#;
+    let mut voice = StudioVoice::from_json(48000.0, json.as_bytes()).unwrap();
+    voice.set(1.0, 1.0);
+    let mut out = vec![0.0; 24000];
+    voice.render(&mut out);
+    let rms = (out[12000..].iter().map(|x| x*x).sum::<f32>() / 12000.0).sqrt();
+    assert!(rms > 1e-6, "steady turbulent air must be audible: {rms}");
+}

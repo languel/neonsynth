@@ -176,11 +176,11 @@ impl StudioVoice {
                                 "air" => Valve::Air,
                                 _ => unreachable!(),
                             };
-                            if let Some(t) = tubes.get(target.id()).filter(|t| t.n > 1) {
-                                let branch = t.branch(0);
-                                let gain = if source == "air" { 3e-5 } else { 1e-6 };
-                                noise.push(NoiseSpec::new(port, branch, branch, gain).band(6000.0, 300.0));
-                            }
+                            // If the target is a single-node tube or chamber, inject turbulence
+                            // into the source port itself: an air-only source must not go silent.
+                            let branch = tubes.get(target.id()).filter(|t| t.n > 1).map_or(port, |t| t.branch(0));
+                            let gain = if source == "air" { 3e-5 } else { 1e-6 };
+                            noise.push(NoiseSpec::new(port, branch, branch, gain).band(6000.0, 300.0));
                             sources.push(Source { pressure_node, target_node: x, port, valve, pitch: *pitch, pressure: *pressure, strength: *strength, tension: *tension });
                         }
                         _ => return Err("Invalid connection".into()),
