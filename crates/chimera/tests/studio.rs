@@ -1,0 +1,44 @@
+use chimera::studio::StudioVoice;
+
+fn design(source: &str, area: f64) -> String {
+    format!(r#"{{"basePitch":220,"attack":0.01,"release":0.05,"vibrato":0,"vibratoRate":5,"pulseDepth":0,"pulseRate":4,"outputGain":1,
+      "parts":[{{"kind":"source","id":"s","source":"{source}","pitch":220,"pressure":12,"strength":0.5,"tension":0.5}},
+        {{"kind":"tube","id":"t","length":24,"areaStart":{area},"areaEnd":2,"wall":"soft"}},
+        {{"kind":"outlet","id":"o"}}],
+      "links":[{{"a":{{"id":"s","end":0}},"b":{{"id":"t","end":0}}}},{{"a":{{"id":"t","end":1}},"b":{{"id":"o","end":0}}}}]}}"#)
+}
+
+#[test]
+fn drawn_tubes_drive_the_actual_airway_and_change_the_sound() {
+    let render = |a| {
+        let mut voice = StudioVoice::from_json(48000.0, design("folds", a).as_bytes()).unwrap();
+        voice.set(1.0, 1.0);
+        let mut out = vec![0.0; 12000];
+        voice.render(&mut out);
+        assert!(out.iter().all(|x| x.is_finite()));
+        assert!(out.iter().any(|x| x.abs() > 1e-5), "the source and airway must radiate sound");
+        out
+    };
+    let a = render(1.0);
+    let b = render(5.0);
+    assert!(a.iter().zip(b.iter()).any(|(x,y)| (x-y).abs() > 1e-4), "drawn geometry must affect the audio");
+}
+
+#[test]
+fn every_physical_source_renders_finite_audio() {
+    for name in ["folds", "syrinx", "reed", "whistle", "air"] {
+        let mut voice = StudioVoice::from_json(48000.0, design(name, 1.0).as_bytes()).unwrap();
+        voice.set(1.0, 1.0);
+        let mut out = vec![0.0; 12000];
+        voice.render(&mut out);
+        assert!(out.iter().all(|x| x.is_finite()), "{name}");
+    }
+}
+
+#[test]
+fn invalid_or_disconnected_graphs_are_rejected() {
+    assert!(StudioVoice::from_json(48000.0, b"{}").is_err());
+    assert!(StudioVoice::from_json(48000.0, design("folds", 0.0).as_bytes()).is_err());
+    let no_outlet = design("folds", 1.0).replace(r#",{"a":{"id":"t","end":1},"b":{"id":"o","end":0}}"#, "");
+    assert!(StudioVoice::from_json(48000.0, no_outlet.as_bytes()).is_err());
+}

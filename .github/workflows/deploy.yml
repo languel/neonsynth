@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pages
@@ -36,25 +36,6 @@ jobs:
         with:
           name: chimera-wasm
           path: src/wasm/chimera.wasm
-      # A temporary dependency bundle lets this restricted development environment run Rust tests.
-      - run: cargo vendor --locked /tmp/chimera-vendor > /tmp/chimera-vendor-config.toml && tar -C /tmp -czf /tmp/chimera-vendor.tar.gz chimera-vendor
-      - uses: actions/upload-artifact@v7
-        with:
-          name: chimera-vendor
-          path: /tmp/chimera-vendor.tar.gz
-      # Temporary bootstrap for a development sandbox that cannot download Actions artifacts.
-      # These unattached Git objects do not change the branch or contain credentials.
-      - name: Publish temporary bootstrap blobs
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for item in wasm vendor; do
-            if [ "$item" = wasm ]; then file=src/wasm/chimera.wasm; else file=/tmp/chimera-vendor.tar.gz; fi
-            base64 -w 0 "$file" > /tmp/blob-base64
-            jq -n --rawfile content /tmp/blob-base64 '{content:$content,encoding:"base64"}' > /tmp/blob-request.json
-            sha=$(gh api -X POST "repos/$GITHUB_REPOSITORY/git/blobs" --input /tmp/blob-request.json --jq .sha)
-            echo "::notice title=BOOTSTRAP_${item^^}::$sha"
-          done
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist

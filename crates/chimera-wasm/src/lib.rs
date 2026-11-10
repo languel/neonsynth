@@ -574,3 +574,53 @@ pub unsafe extern "C" fn engine_score_json(h: *mut Handle) -> u32 {
     let h = handle!(h);
     api::set_result(serde_json::to_value(h.engine.score().gestures()).map_err(|e| e.to_string()))
 }
+
+// ------------------------------------------------------------------ user-built physical voices
+
+/// One independent graph plus its fixed output buffer. Rebuild only when the design changes.
+pub struct StudioHandle {
+    voice: chimera::studio::StudioVoice,
+    out: Vec<f32>,
+}
+
+/// # Safety
+/// `data` must point to `len` readable bytes containing an instrument JSON object.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn studio_new(fs: f64, data: *const u8, len: usize) -> *mut StudioHandle {
+    if data.is_null() || len > 100_000 { return core::ptr::null_mut(); }
+    let bytes = unsafe { core::slice::from_raw_parts(data, len) };
+    match chimera::studio::StudioVoice::from_json(fs, bytes) {
+        Ok(voice) => Box::into_raw(Box::new(StudioHandle { voice, out: vec![0.0; MAX_RENDER] })),
+        Err(_) => core::ptr::null_mut(),
+    }
+}
+
+/// # Safety
+/// `h` must be a live studio handle, or null.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn studio_free(h: *mut StudioHandle) {
+    if !h.is_null() { drop(unsafe { Box::from_raw(h) }); }
+}
+
+/// # Safety
+/// `h` must be a live studio handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn studio_set(h: *mut StudioHandle, ratio: f64, gate: f64) {
+    unsafe { &mut *h }.voice.set(ratio, gate);
+}
+
+/// # Safety
+/// `h` must be a live studio handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn studio_render(h: *mut StudioHandle, n: usize) -> *const f32 {
+    let h = unsafe { &mut *h };
+    h.voice.render(&mut h.out[..n.min(MAX_RENDER)]);
+    h.out.as_ptr()
+}
+
+/// # Safety
+/// `h` must be a live studio handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn studio_rms(h: *mut StudioHandle) -> f64 {
+    unsafe { &mut *h }.voice.rms
+}

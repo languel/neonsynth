@@ -46,6 +46,7 @@ pub mod util {
 }
 
 pub mod creatures;
+pub mod studio;
 pub mod engine;
 pub mod phonetics;
 
