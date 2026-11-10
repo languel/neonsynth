@@ -148,6 +148,9 @@ export const useStore = create<State>((set, get) => ({
     session++;
     // notes held across the switch would keep breathing into the other voice
     set({ mode: m, heldNotes: [] });
+    // The original single-voice MIDI handler must not also play the human voice while
+    // the band mixer owns the inputs. Its keyboard can be re-enabled in the original modes.
+    if ((m === "build" || m === "band") && get().midi.status !== "off") get().setMidi(false);
     if (prev === "play" && !get().source.voiced) {
       whisperInPlay = true;
       get().setSource({ voiced: true });

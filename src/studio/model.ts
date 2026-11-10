@@ -15,7 +15,7 @@ export type Design = {
   basePitch: number; attack: number; release: number; vibrato: number; vibratoRate: number; pulseDepth: number; pulseRate: number; outputGain: number;
   parts: Part[]; links: Link[];
 };
-export type Track = { id: string; name: string; design: Design; level: number; mute: boolean; steps: (number | null)[] };
+export type Track = { id: string; name: string; design: Design; channel: number; level: number; pan: number; expression: number; mute: boolean; solo: boolean; steps: (number | null)[] };
 export type Band = { version: 1; id: string; name: string; bpm: number; tracks: Track[] };
 
 export const uid = () => crypto.randomUUID();
@@ -93,5 +93,33 @@ export function isDesign(v: unknown): v is Design {
 export function isBand(v: unknown): v is Band {
   if (!v || typeof v !== "object") return false;
   const b = v as Band;
-  return b.version === 1 && typeof b.id === "string" && b.id.length <= 80 && typeof b.name === "string" && b.name.length <= 100 && Number.isFinite(b.bpm) && b.bpm >= 40 && b.bpm <= 220 && Array.isArray(b.tracks) && b.tracks.length <= 4 && b.tracks.every(t => t && typeof t.id === "string" && t.id.length <= 80 && typeof t.name === "string" && t.name.length <= 100 && isDesign(t.design) && !graphError(t.design) && Number.isFinite(t.level) && t.level >= 0 && t.level <= 1 && typeof t.mute === "boolean" && Array.isArray(t.steps) && t.steps.length === 16 && t.steps.every(n => n === null || Number.isInteger(n) && n >= 24 && n <= 108));
+  if (!(b.version === 1 && typeof b.id === "string" && b.id.length <= 80 && typeof b.name === "string" && b.name.length <= 100 && Number.isFinite(b.bpm) && b.bpm >= 40 && b.bpm <= 220 && Array.isArray(b.tracks) && b.tracks.length <= 4)) return false;
+  const ids = new Set<string>();
+  return b.tracks.every(t => {
+    if (!(t && typeof t.id === "string" && t.id.length > 0 && t.id.length <= 80 && !ids.has(t.id) && typeof t.name === "string" && t.name.length <= 100 && isDesign(t.design) && !graphError(t.design) && Number.isInteger(t.channel) && t.channel >= 1 && t.channel <= 16 && Number.isFinite(t.level) && t.level >= 0 && t.level <= 1 && Number.isFinite(t.pan) && t.pan >= -1 && t.pan <= 1 && Number.isFinite(t.expression) && t.expression >= 0 && t.expression <= 1 && typeof t.mute === "boolean" && typeof t.solo === "boolean" && Array.isArray(t.steps) && t.steps.length === 16 && t.steps.every(n => n === null || Number.isInteger(n) && n >= 24 && n <= 108))) return false;
+    ids.add(t.id);
+    return true;
+  });
+}
+/** Older v1 band exports had no mixer; give only missing fields safe defaults. */
+export function normalizeBand(value: unknown): Band | null {
+  if (!value || typeof value !== "object") return null;
+  const b = value as Record<string, unknown>;
+  if (!Array.isArray(b.tracks)) return null;
+  // Preserve explicitly shared channels, but do not accidentally assign a legacy
+  // part to a channel already set on another part in a partially migrated file.
+  const used = new Set(b.tracks.flatMap(v => {
+    if (!v || typeof v !== "object") return [];
+    const channel = (v as Record<string, unknown>).channel;
+    return typeof channel === "number" && Number.isInteger(channel) && channel >= 1 && channel <= 16 ? [channel] : [];
+  }));
+  const tracks = b.tracks.map(v => {
+    if (!v || typeof v !== "object") return v;
+    const t = v as Record<string, unknown>;
+    const channel = t.channel === undefined ? Array.from({length:16}, (_,i)=>i+1).find(n=>!used.has(n)) : t.channel;
+    if (typeof channel === "number") used.add(channel);
+    return { ...t, channel, pan: t.pan === undefined ? 0 : t.pan, expression: t.expression === undefined ? 1 : t.expression, solo: t.solo === undefined ? false : t.solo };
+  });
+  const migrated = { ...b, tracks };
+  return isBand(migrated) ? migrated : null;
 }

@@ -14,8 +14,8 @@ type StudioState = {
 };
 const initial = readLibrary();
 const defaultBand = (): Band => ({ ...newBand(), name: "Creature ensemble", tracks: [
-  { id: uid(), name: "Whale / bass", design: example("example-whale"), level: .65, mute: false, steps: [36,null,null,null,36,null,null,null,41,null,null,null,39,null,null,null] },
-  { id: uid(), name: "Songbird / lead", design: example("example-bird"), level: .45, mute: false, steps: [null,null,84,null,88,null,91,null,86,null,84,null,81,null,84,null] },
+  { id: uid(), name: "Whale / bass", design: example("example-whale"), channel: 1, level: .65, pan: -.15, expression: 1, mute: false, solo: false, steps: [36,null,null,null,36,null,null,null,41,null,null,null,39,null,null,null] },
+  { id: uid(), name: "Songbird / lead", design: example("example-bird"), channel: 2, level: .45, pan: .15, expression: 1, mute: false, solo: false, steps: [null,null,84,null,88,null,91,null,86,null,84,null,81,null,84,null] },
 ] });
 export const useStudio = create<StudioState>((set, get) => ({
   design: example("example-whale"), selected: null, band: defaultBand(), instruments: initial.instruments, bands: initial.bands, message: "",
@@ -43,7 +43,11 @@ export const useStudio = create<StudioState>((set, get) => ({
   deleteDesign: (id) => { try { const lib = readLibrary(); lib.instruments = lib.instruments.filter(x => x.id !== id); writeLibrary(lib); set({ instruments: lib.instruments, message: "Saved instrument removed." }); } catch { set({ message: "Could not update browser storage." }); } },
   setBand: (band) => set({ band: copy(band), message: "" }),
   patchBand: (p) => set(s => ({ band: { ...s.band, ...p } })),
-  addTrack: (d) => set(s => s.band.tracks.length >= 4 ? ({ message: "A band supports up to four independent voices." }) : ({ band: { ...s.band, tracks: [...s.band.tracks, { id: uid(), name: d.name, design: copy(d), level: .65, mute: false, steps: Array(16).fill(null) }] }, message: `${d.name} added to the band.` })),
+  addTrack: (d) => set(s => {
+    if (s.band.tracks.length >= 4) return { message: "A band supports up to four independent voices." };
+    const channel = Array.from({length:16}, (_,i)=>i+1).find(n=>!s.band.tracks.some(t=>t.channel===n)) ?? 1;
+    return { band: { ...s.band, tracks: [...s.band.tracks, { id: uid(), name: d.name, design: copy(d), channel, level: .65, pan: 0, expression: 1, mute: false, solo: false, steps: Array(16).fill(null) }] }, message: `${d.name} added on MIDI channel ${channel}.` };
+  }),
   patchTrack: (id, p) => set(s => ({ band: { ...s.band, tracks: s.band.tracks.map(t => t.id === id ? { ...t, ...p } : t) } })),
   removeTrack: (id) => set(s => ({ band: { ...s.band, tracks: s.band.tracks.filter(t => t.id !== id) } })),
   saveBand: () => { try { const band = saveBand(get().band); set({ band, bands: readLibrary().bands, message: "Band saved in this browser, including its instrument designs." }); } catch { set({ message: "Could not save. Browser storage may be full or unavailable." }); } },

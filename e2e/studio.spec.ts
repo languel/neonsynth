@@ -44,7 +44,7 @@ test("draw a physical instrument, save it, and add it as an independent band par
   await page.getByRole("button",{name:"Stop band"}).click();
   await page.getByLabel("Band name").fill("Test ensemble");
   await page.getByRole("button",{name:"Save band"}).click();
-  await expect(page.getByRole("status")).toContainText("saved");
+  await expect(page.locator(".studio-status")).toContainText("saved");
   await page.reload();
   await page.getByRole("radio",{name:"Build"}).click();
   await page.getByLabel("Examples and saved instruments").selectOption({label:"Test throat"});

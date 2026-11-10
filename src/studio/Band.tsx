@@ -6,6 +6,8 @@ import { ensureStudioAudio } from "./Builder.tsx";
 import { EXAMPLES } from "./examples.ts";
 import { clamp, graphError, newBand, type Design, type Track } from "./model.ts";
 import { NumberInput } from "./NumberInput.tsx";
+import { bandMidi } from "./midi.ts";
+import { Mixer } from "./Mixer.tsx";
 import { download, importFile } from "./storage.ts";
 import { useStudio } from "./store.ts";
 
@@ -16,15 +18,13 @@ function BandTrack({ track, step }: { track: Track; step: number }) {
   const [brush, setBrush] = useState(clamp(track.steps.find(n=>n!==null) ?? Math.round(69+12*Math.log2(track.design.basePitch/440)),24,108));
   return <section className="band-track" aria-label={`Band part ${track.name}`}>
     <div className="track-heading">
-      <label><span className="sr-only">Part name</span><input className="track-name" aria-label="Part name" value={track.name} maxLength={100} onChange={e=>patch(track.id,{name:e.target.value})}/></label>
+      <label><input className="track-name" aria-label="Part name" value={track.name} maxLength={100} onChange={e=>patch(track.id,{name:e.target.value})}/></label>
       <span className="track-design">{track.design.name} / {track.design.parts.length} parts</span>
-      <button className={`chip${track.mute ? " on" : ""}`} aria-pressed={track.mute} onClick={()=>patch(track.id,{mute:!track.mute})}>Mute</button>
       <button className="track-remove" aria-label={`Remove ${track.name}`} onClick={()=>remove(track.id)}>×</button>
     </div>
     <div className="track-content">
       <div className="track-controls">
         <label>Note to place <select aria-label={`Note to place for ${track.name}`} value={clamp(brush,24,108)} onChange={e=>setBrush(Number(e.target.value))}>{NOTES.map(n=><option key={n} value={n}>{noteName(n)}</option>)}</select></label>
-        <label>Level <input aria-label={`Level for ${track.name}`} type="range" min="0" max="1" step=".05" value={track.level} onChange={e=>patch(track.id,{level:Number(e.target.value)})}/></label>
       </div>
       <div className="steps" role="group" aria-label={`${track.name} pattern`}>
         {track.steps.map((note,i)=><button key={i} className={`step${note!==null ? " on" : ""}${step===i ? " playing" : ""}`} aria-label={`${track.name} step ${i+1}: ${note === null ? "rest" : noteName(note)}`} aria-pressed={note!==null} onClick={()=>{const steps=track.steps.slice(); steps[i]=steps[i]===brush ? null : brush; patch(track.id,{steps});}}><span>{i+1}</span><b>{note===null ? "·" : noteName(note)}</b></button>)}
@@ -62,31 +62,78 @@ function AddVoice() {
 export function BandPage() {
   const { band, patchBand, message, setMessage } = useStudio();
   const [status,setStatus] = useState(studioAudio.status);
+  const [midi,setMidi] = useState(bandMidi.state);
+  const connectAttempt = useRef(0);
   useEffect(()=>studioAudio.subscribe(setStatus),[]);
-  useEffect(()=>{if(studioAudio.status.mode === "band")studioAudio.stop();},[band]);
+  useEffect(()=>bandMidi.subscribe(setMidi),[]);
+  useEffect(()=>()=>{ connectAttempt.current++; bandMidi.disconnect(); },[]);
+  useEffect(()=>{
+    bandMidi.setRoutes(band.tracks);
+    if(studioAudio.status.mode === "band") {
+      const rebuilt=studioAudio.updateBand(band.tracks,band.bpm);
+      if(rebuilt && band.tracks.length)bandMidi.sync();
+    } else if(bandMidi.state.status === "on" && studioAudio.ready && band.tracks.length) {
+      studioAudio.band(band.tracks,band.bpm,false); bandMidi.sync();
+    }
+  },[band]);
   const play = async () => {
-    if(status.mode === "band") {studioAudio.stop(); return;}
+    if(status.mode === "band" && status.playing) {
+      studioAudio.transport(false);
+      if(bandMidi.state.status!=="on")studioAudio.stop();
+      return;
+    }
+    if(status.mode === "band") { studioAudio.transport(true); return; }
     try {
       if(!band.tracks.length)throw new Error("Add a voice to the band first.");
       const revision = studioAudio.revision;
       await ensureStudioAudio();
       if (revision !== studioAudio.revision || useStore.getState().mode !== "band" || useStudio.getState().band !== band) return;
-      studioAudio.band(band.tracks, band.bpm);
+      bandMidi.setRoutes(band.tracks); studioAudio.band(band.tracks, band.bpm, true); bandMidi.sync();
     }
     catch(e){setMessage(e instanceof Error?e.message:"Could not play band.");}
   };
+  const connect = async () => {
+    const token=++connectAttempt.current, revision=studioAudio.revision;
+    try {
+      // Ask for MIDI and start audio in the same user gesture. MIDI can arrive
+      // before the worklet is ready; the router remembers it and syncs below.
+      const access=bandMidi.connect();
+      if(bandMidi.state.status === "unsupported" || bandMidi.state.status === "denied") { await access; return; }
+      const audio=ensureStudioAudio();
+      const [,ok]=await Promise.all([audio,access]);
+      if(!ok || token!==connectAttempt.current)return;
+      if(revision!==studioAudio.revision || useStore.getState().mode!=="band") { bandMidi.disconnect(); return; }
+      const current=useStudio.getState().band;
+      bandMidi.setRoutes(current.tracks);
+      if(current.tracks.length) {
+        if(studioAudio.status.mode==="band")studioAudio.updateBand(current.tracks,current.bpm);
+        else studioAudio.band(current.tracks,current.bpm,false);
+        bandMidi.sync();
+      }
+    } catch(e) {
+      if(token!==connectAttempt.current)return;
+      bandMidi.disconnect(); setMessage(e instanceof Error?e.message:"Could not start MIDI audio.");
+    }
+  };
+  const disconnect = () => {
+    connectAttempt.current++; bandMidi.disconnect();
+    if(!studioAudio.status.playing)studioAudio.stop();
+  };
   return <main className="band-wall">
-    <Screen focus className="band-sequencer" title="Band" sub="Four independent physical voices / 16 steps">
-      <div className="band-body">
-        <div className="band-transport"><button className="primary" onClick={()=>void play()}>{status.mode === "band" ? "Stop band" : "Play band"}</button><label>Tempo <NumberInput aria-label="Tempo" min={40} max={220} value={band.bpm} onChange={bpm=>patchBand({bpm})}/> BPM</label><span className="studio-meter">{status.mode === "band" ? `${status.voices} VOICES · STEP ${status.step+1} · LOAD ${Math.round(status.load * 100)}%` : "TRANSPORT / STOPPED"}</span></div>
-        <p className="studio-muted">Choose a note in each part and tap the 16 steps. Tap it again to clear; choosing another note replaces it. Editing stops playback so the physical graph can be rebuilt safely.</p>
-        <div className="band-tracks">{band.tracks.map(t=><BandTrack key={t.id} track={t} step={status.mode === "band" ? status.step : -1}/>)}</div>
-        {!band.tracks.length && <p className="band-empty">NO VOICES YET<br/><span>Add a voice from the panel to begin.</span></p>}
-        {status.mode === "band" && status.load > .85 && <p className="studio-warning">High audio load. Stop playback and mute or remove a voice if the sound breaks up.</p>}
-        {status.error && <p className="studio-warning">{status.error}</p>}
-        {message && <p role="status" className="studio-status">{message}</p>}
-      </div>
-    </Screen>
+    <div className="band-main">
+      <Mixer band={band} midi={midi} meters={status.meters} connect={()=>void connect()} disconnect={disconnect}/>
+      <Screen focus className="band-sequencer" title="Band" sub="Four independent physical voices / 16 steps">
+        <div className="band-body">
+          <div className="band-transport"><button className="primary" onClick={()=>void play()}>{status.mode === "band" && status.playing ? "Stop band" : "Play band"}</button><label>Tempo <NumberInput aria-label="Tempo" min={40} max={220} value={band.bpm} onChange={bpm=>patchBand({bpm})}/> BPM</label><span className="studio-meter">{status.mode === "band" ? `${status.voices} VOICES · ${status.playing ? `STEP ${status.step+1}` : "MIDI LIVE"} · LOAD ${Math.round(status.load * 100)}%` : "TRANSPORT / STOPPED"}</span></div>
+          <p className="studio-muted">Choose a note in each part and tap the 16 steps. Tap it again to clear; choosing another note replaces it. Live MIDI notes take priority over the sequencer on that voice.</p>
+          <div className="band-tracks">{band.tracks.map(t=><BandTrack key={t.id} track={t} step={status.mode === "band" && status.playing ? status.step : -1}/>)}</div>
+          {!band.tracks.length && <p className="band-empty">NO VOICES YET<br/><span>Add a voice from the panel to begin.</span></p>}
+          {status.mode === "band" && status.load > .85 && <p className="studio-warning">High audio load. Mute or remove a voice if the sound breaks up.</p>}
+          {status.error && <p className="studio-warning">{status.error}</p>}
+          {message && <p role="status" className="studio-status">{message}</p>}
+        </div>
+      </Screen>
+    </div>
     <aside className="band-side"><Screen title="Add a voice" sub="Instrument / part"><AddVoice/></Screen><Screen title="Band library" sub="Save / import / export"><BandLibrary/></Screen><Screen title="Signal path" sub="What you hear"><div className="studio-panel"><p className="studio-muted">Each part instantiates its own Chimera Rust airway and source models. Their radiated signals are mixed on the audio thread—voices sound together, not one after another.</p><p className="studio-muted">Examples are creative physical sketches, not recordings or claims of exact animal anatomy.</p></div></Screen></aside>
   </main>;
 }
