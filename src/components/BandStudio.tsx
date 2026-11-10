@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { ArrowDown, AudioLines, Check, ChevronDown, CircleHelp, Music2, Pause, Play, Plus, Save, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { ArrowDown, AudioLines, Check, ChevronDown, CircleHelp, Download, FileUp, Music2, Pause, Play, Plus, Save, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { audio } from '../audio/AudioEngine';
 import { isPlayable } from '../model/graph';
 import { copy, makeId, type Band, type Instrument, type Track } from '../model/types';
@@ -15,6 +15,8 @@ interface Props {
   onNew: () => void;
   onLoad: (band: Band) => void;
   onDelete: (id: string) => void;
+  onImport: (file: File) => void;
+  onExport: () => void;
   onAudio: () => void;
   onError: (message: string) => void;
 }
@@ -22,11 +24,12 @@ const offsets = [0, 2, 4, 7, 12];
 const pitches = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
 export const noteName = (midi: number) => `${pitches[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
 
-export function BandStudio({ band, setBand, bands, instruments, current, onSave, onNew, onLoad, onDelete, onAudio, onError }: Props) {
+export function BandStudio({ band, setBand, bands, instruments, current, onSave, onNew, onLoad, onDelete, onImport, onExport, onAudio, onError }: Props) {
   const [playing, setPlaying] = useState(false);
   const [activeStep, setActiveStep] = useState<number | null>(null);
   const [paint, setPaint] = useState(0);
   const [loadOpen, setLoadOpen] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
   const timer = useRef<number | null>(null);
   const starting = useRef(false);
   const highlightTimers = useRef<number[]>([]);
@@ -87,7 +90,7 @@ export function BandStudio({ band, setBand, bands, instruments, current, onSave,
     setBand((b) => ({ ...b, tracks: [...b.tracks, { id: makeId('voice'), name: 'New voice', instrumentId: instrument.id, instrumentSnapshot: copy(instrument), note: 60, volume: .7, muted: false, steps: Array(16).fill(null) }] }));
   };
   return <main className="band-page page-content">
-    <div className="page-heading"><div><div className="breadcrumb">YOUR WORKSPACE <span>/</span> BAND STUDIO</div><div className="title-line"><h1>Better together.</h1><span className="title-spark">✳</span></div><p>Give every creature a part. Make a little noise together.</p></div><div className="heading-actions"><div className="load-wrapper"><button className="button secondary" onClick={() => setLoadOpen(!loadOpen)} aria-expanded={loadOpen}>Saved bands <span className="small-count">{bands.length}</span><ChevronDown size={14}/></button>{loadOpen && <div className="load-menu"><span className="menu-eyebrow">YOUR SAVED BANDS</span><button className="new-band-menu" onClick={() => { stop(); onNew(); setLoadOpen(false); }}><Plus size={14}/> New empty band</button>{bands.length ? bands.map((item) => <div key={item.id}><button onClick={() => { stop(); onLoad(item); setLoadOpen(false); }}><Music2 size={14}/>{item.name}</button><button className="delete-saved-band" onClick={() => onDelete(item.id)} aria-label={`Delete ${item.name}`}><Trash2 size={14}/></button></div>) : <p>No bands saved yet.</p>}</div>}</div><button className="button secondary" onClick={onSave}><Save size={15}/> Save band</button><button className="button primary" onClick={() => void togglePlay()}>{playing ? <Pause size={15} fill="currentColor"/> : <Play size={15} fill="currentColor"/>}{playing ? 'Stop band' : 'Play band'}</button></div></div>
+    <div className="page-heading"><div><div className="breadcrumb">YOUR WORKSPACE <span>/</span> BAND STUDIO</div><div className="title-line"><h1>Better together.</h1><span className="title-spark">✳</span></div><p>Give every creature a part. Make a little noise together.</p></div><div className="heading-actions"><div className="load-wrapper"><input ref={importRef} type="file" accept="application/json,.json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(file); event.target.value = ''; }}/><button className="button secondary" onClick={() => setLoadOpen(!loadOpen)} aria-expanded={loadOpen}>Saved bands <span className="small-count">{bands.length}</span><ChevronDown size={14}/></button>{loadOpen && <div className="load-menu"><span className="menu-eyebrow">YOUR SAVED BANDS</span><button className="new-band-menu" onClick={() => { stop(); onNew(); setLoadOpen(false); }}><Plus size={14}/> New empty band</button><button onClick={() => { importRef.current?.click(); setLoadOpen(false); }}><FileUp size={14}/> Import band JSON</button><button className="new-band-menu" onClick={() => { onExport(); setLoadOpen(false); }}><Download size={14}/> Export current band</button>{bands.length ? bands.map((item) => <div key={item.id}><button onClick={() => { stop(); onLoad(item); setLoadOpen(false); }}><Music2 size={14}/>{item.name}</button><button className="delete-saved-band" onClick={() => onDelete(item.id)} aria-label={`Delete ${item.name}`}><Trash2 size={14}/></button></div>) : <p>No bands saved yet.</p>}</div>}</div><button className="button secondary" onClick={onSave}><Save size={15}/> Save band</button><button className="button primary" onClick={() => void togglePlay()}>{playing ? <Pause size={15} fill="currentColor"/> : <Play size={15} fill="currentColor"/>}{playing ? 'Stop band' : 'Play band'}</button></div></div>
     <div className="band-intro"><div className="band-icon"><AudioLines size={22}/></div><div><span className="eyebrow">YOUR ARRANGEMENT</span><label className="band-name-label"><input aria-label="Band name" value={band.name} maxLength={60} onChange={(event) => setBand((b) => ({ ...b, name: event.target.value }))}/></label><p>16 steps · {band.tracks.length} {band.tracks.length === 1 ? 'voice' : 'voices'} · infinite possibilities</p></div><div className="tempo"><span>TEMPO</span><div><input aria-label="Tempo in BPM" type="number" min="50" max="180" value={band.bpm} onChange={(event) => setBand((b) => ({ ...b, bpm: Math.max(50, Math.min(180, Number(event.target.value) || 50)) }))}/><strong>BPM</strong></div></div><div className="band-intro-art"><span>✳</span><i/><i/><i/><i/><i/><i/><i/><i/></div></div>
     <div className="sequencer-card">
       <div className="sequencer-heading"><div><span className="eyebrow">THE BAND ROOM</span><h2>Build your arrangement</h2><p>Choose a pitch, then tap steps to paint notes. Tap the same note again to erase it.</p></div><button className="button secondary" onClick={addTrack}><Plus size={15}/> Add voice</button></div>

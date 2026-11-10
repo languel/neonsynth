@@ -10,6 +10,8 @@ Draw an instrument, give its parts energy and behavior, and make a band from voi
 npm ci
 npm run dev          # http://localhost:5173
 npm test             # sound-engine tests
+npx playwright install chromium
+npm run test:e2e     # browser workflow tests
 npm run build        # type-check and production build
 ```
 
@@ -22,9 +24,9 @@ Open the site over HTTPS or on localhost: the Web Audio worklet requires a secur
 - Use **Add part** for named components. Select one to change its name, role, source, and behavior. Connect parts in the direction energy travels with the **Connect parts** tool: select the sender, then the receiver. At least one source must reach an outlet to play. Connections can branch, and can be removed in the inspector. Feedback loops are rejected.
 - Audition with **Hear it**, the on-screen piano, or the A–K keyboard keys (W/E/T/Y/U are the black keys). Changes take effect on the next note.
 - **Save instrument** puts a copy in **Library → My instruments**. The current draft is also retained on this device. Use JSON export/import in the library for backups or sharing. Saving an example never changes the bundled original.
-- In **Band studio**, add voices, choose an instrument for each, name its part, set its root note, level and mute state, and paint notes across the 16-step loop. Pick a semitone offset before clicking a step; click the same pitch again to erase. Save named bands and load them from **Saved bands**; **New empty band** starts another. Saved arrangements include instrument snapshots, so they can still play if a library instrument is later removed.
+- In **Band studio**, add voices, choose an instrument for each, name its part, set its root note, level and mute state, and paint notes across the 16-step loop. Pick a semitone offset before clicking a step; click the same pitch again to erase. Save named bands and load them from **Saved bands**; **New empty band** starts another. Saved arrangements include instrument snapshots, so they can still play if a library instrument is later removed. The Saved bands menu also exports and imports band JSON with those snapshots.
 
-Instruments, drafts, and bands are stored in this browser's local storage—not in a cloud account. Clearing browser data removes them; export instrument JSON if you need a backup. Band export/sync is not yet available.
+Instruments, drafts, and bands are stored in this browser's local storage—not in a cloud account. Clearing browser data removes them; export instrument and band JSON if you need backups. Cloud sync is not yet available.
 
 ## Sound model and attribution
 
