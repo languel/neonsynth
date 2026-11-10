@@ -4,6 +4,12 @@ This project starts with the full [Chimera Vocal Synth](https://github.com/james
 
 **Live site:** <https://languel.github.io/neonsynth/>
 
+## Write a sung score
+
+In **Sing**, the piano roll opens in **Edit**. Drag across the grid to draw a note, drag a note to move it, or drag its right edge to change its length. Empty sixteenth-note steps are rests. The voice is monophonic: a new or moved note trims any older notes it overlaps. Select a note for exact MIDI pitch, start and length fields; its arrow keys move it, Shift + left/right resizes it, and Delete removes it. Use the octave buttons to reach other pitches. The lyric syllables are assigned to notes in time order; a lone hyphen in the lyrics carries the preceding vowel.
+
+Choose **Breath**, **Vibrato**, or **Jaw** below the roll, and draw in the lower lane to set its value at each sixteenth note. Blank steps leave the normal singing behavior in place; Erase, Clear point and Clear lane remove automation. Breath scales the planner's breath pressure, vibrato controls depth in cents, and jaw drives the physical articulator alongside the phonemes. **Play score** renders the current score once through Chimera's physical voice; changes during playback take effect on the next play. Built-in melodies can be loaded for editing, and **Live** restores the original scrolling pitch/voice monitor. The score and lyrics are remembered in this browser, not synchronized or backed up.
+
 ## Build an instrument
 
 Choose **Build** next to the five original modes. Load an example, or choose **New drawing**. Draw a duct, place sources, chambers and outlets, then use **Connect** and click two glowing anchors at a time. Select a part to edit its dimensions, wall material or energy source. A drawing's centerline determines the initial duct length; the editable start and end areas create its taper. Coordinates are diagrammatic, not a 3D acoustic mesh: the solver uses the resulting lengths, areas, cavity volumes, connections and source settings.

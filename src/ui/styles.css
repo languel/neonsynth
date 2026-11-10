@@ -2963,3 +2963,27 @@ input[type="range"]::-moz-range-thumb {
 .mixer-meter { height:5px; background:#092237; border:1px solid var(--frame); }
 .mixer-meter span { display:block; height:100%; background:var(--amber); box-shadow:0 0 5px #ffb340; }
 @media (max-width:700px) { .band-main { gap:8px; } .mixer-strips { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* Sing's editable score uses the same black glass, thin vector frames and control colors. */
+.score-editor { display:flex; flex-direction:column; gap:8px; min-width:0; padding:10px 14px 14px; }
+.score-transport, .score-toolbar, .score-selection, .score-automation, .score-octave { display:flex; flex-wrap:wrap; align-items:center; gap:6px 9px; min-width:0; }
+.score-transport label, .score-selection label, .score-automation label { display:inline-flex; gap:5px; align-items:center; color:var(--text-dim); font-size:11px; }
+.score-transport input, .score-selection input[type=number], .score-automation input[type=number] { width:56px; min-width:0; }
+.score-transport input, .score-transport select, .score-selection input[type=number], .score-automation input[type=number], .score-automation select { background:#02090d; color:var(--text); border:1px solid var(--blue-dim); border-radius:0; padding:4px 5px; font:inherit; }
+.score-toolbar .chip, .score-selection .chip, .score-automation .chip { padding:3px 7px; min-height:25px; font-size:10px; }
+.score-octave, .score-caption { color:var(--blue); font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+.score-hint { color:var(--text-dim); margin:0; font-size:11px; line-height:1.4; letter-spacing:.02em; }
+.score-scroll { max-width:100%; min-width:0; overflow-x:auto; overflow-y:hidden; border:1px solid var(--frame); overscroll-behavior-x:contain; }
+.score-grid { display:block; max-width:none; user-select:none; touch-action:none; cursor:crosshair; }
+.score-pitch, .score-ruler, .score-note-text { font-family:var(--font); font-size:10px; letter-spacing:.06em; }
+.score-ruler { fill:#4285ab; font-size:9px; }
+.score-note { cursor:grab; }
+.score-note:active { cursor:grabbing; }
+.score-note:focus-visible { outline:none; filter:drop-shadow(0 0 4px #5be381); }
+.score-auto-value input { width:85px; accent-color:var(--amber); }
+.score-auto-value span { min-width:28px; font-size:10px; }
+.score-error { color:var(--amber); margin:0; font-size:12px; }
+@media (max-width:640px) {
+  .score-editor { padding:9px 10px 12px; }
+  .score-toolbar .score-hint { width:100%; }
+}

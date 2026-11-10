@@ -1,0 +1,50 @@
+import { expect, test } from "@playwright/test";
+
+test("draw and resize sung notes and automation, play them, and keep the live roll", async ({page}) => {
+  const errors:string[]=[]; page.on("pageerror",e=>errors.push(e.message));
+  await page.goto("./");
+  const grid=page.getByLabel(/Editable piano roll and automation/);
+  await expect(grid).toBeVisible();
+  await page.getByRole("button",{name:"Clear notes"}).click();
+  await expect(grid.getByRole("button",{name:/^Note/})).toHaveCount(0);
+  const at=async(x:number,y:number) => { const b=await grid.boundingBox(); if(!b)throw new Error("no grid"); return {x:b.x+x,y:b.y+y}; };
+  const a=await at(48+2*30+5,27+7*22+11), b=await at(48+5*30+10,27+7*22+11);
+  await page.mouse.move(a.x,a.y); await page.mouse.down(); await page.mouse.move(b.x,b.y,{steps:12}); await page.mouse.up();
+  await expect(grid.getByRole("button",{name:/^Note/})).toHaveCount(1);
+  await expect(page.getByLabel("Selected note start step")).toHaveValue("3");
+  await expect(page.getByLabel("Selected note length")).toHaveValue("4");
+  await page.getByLabel("Selected note length").fill("6");
+  await expect(page.getByLabel("Selected note length")).toHaveValue("6");
+  const p=await at(48+2*30+10,27+13*22+32+20), q=await at(48+5*30+10,27+13*22+32+50);
+  await page.mouse.move(p.x,p.y); await page.mouse.down(); await page.mouse.move(q.x,q.y,{steps:10}); await page.mouse.up();
+  await expect(page.getByLabel("Automation step")).toHaveValue("6");
+  await expect(page.locator(".score-auto-value span")).not.toHaveText("—");
+  await page.getByLabel("Automation parameter").selectOption("jaw");
+  await page.getByLabel("Jaw automation value").fill("80");
+  await expect(page.locator(".score-auto-value span")).toHaveText("80%");
+  await page.getByLabel("Lyrics to sing").fill("hello");
+  await page.getByRole("button",{name:"Play score"}).click();
+  await expect(page.getByRole("button",{name:"Stop score"})).toBeVisible();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__chimeraEngine?.latest?.t?.outRms ?? 0),{timeout:15_000}).toBeGreaterThan(.00001);
+  await page.getByRole("button",{name:"Stop score"}).click();
+  await page.getByRole("button",{name:"Live",exact:true}).click();
+  await expect(page.getByLabel(/Piano roll: the notes played/)).toBeVisible();
+  await page.getByRole("button",{name:"Edit",exact:true}).click();
+  await page.reload();
+  await expect(page.getByLabel("Lyrics to sing")).toHaveValue("hello");
+  await expect(page.getByLabel(/Editable piano roll and automation/).getByRole("button",{name:/^Note/})).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("the score editor is usable at phone width and can load an editable melody", async ({page}) => {
+  await page.setViewportSize({width:390,height:844}); await page.goto("./");
+  await page.getByLabel("Load an editable demo melody").selectOption({label:"Twinkle, twinkle"});
+  await expect(page.getByLabel("Lyrics to sing")).toHaveValue(/Twinkle/);
+  await expect(page.getByLabel("Score length")).toHaveValue("64");
+  await expect(page.getByLabel(/Editable piano roll and automation/).getByRole("button",{name:/^Note/})).toHaveCount(14);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.getByRole("button",{name:"Play score"}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__chimeraEngine?.latest?.t?.outRms ?? 0),{timeout:15_000}).toBeGreaterThan(.00001);
+  await page.getByRole("radio",{name:"Build"}).click();
+  await expect.poll(()=>page.evaluate(()=>(window as any).__chimeraEngine?.latest?.t?.outRms ?? 1),{timeout:10_000}).toBeLessThan(.001);
+});

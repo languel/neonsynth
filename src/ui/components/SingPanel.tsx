@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store.ts";
 import { useSing, playDemo, stopSinging, soundingSyllable, sungNow, DEMO_SONGS, ensureDictionary } from "../singing.ts";
 import { mouthWords } from "../mouthWords.ts";
 import { V } from "../colors.ts";
 import { Keys } from "./Keys.tsx";
 import { PianoRoll } from "./PianoRoll.tsx";
+import { ScoreEditor } from "./ScoreEditor.tsx";
 import { SpectrumView } from "./SpectrumView.tsx";
 import { Chip, Screen } from "./Screen.tsx";
 import { EncoderPages } from "./Encoder.tsx";
@@ -18,6 +19,7 @@ const RING = 0.85;
 function syllableNow(): string | null {
   const s = useSing.getState();
   if (s.demo) return s.syllables[s.demoAt]?.text ?? null;
+  if (s.scorePlaying) return s.syllables[s.scoreAt]?.text ?? null;
   return soundingSyllable();
 }
 
@@ -40,10 +42,12 @@ function Lyrics() {
   const cursor = useSing((s) => s.cursor);
   const demo = useSing((s) => s.demo);
   const demoAt = useSing((s) => s.demoAt);
+  const scorePlaying = useSing((s) => s.scorePlaying);
+  const scoreAt = useSing((s) => s.scoreAt);
   const setLyrics = useSing((s) => s.setLyrics);
   const setCursor = useSing((s) => s.setCursor);
-  const at = demo ? demoAt : -1;
-  const done = demo ? demoAt : cursor;
+  const at = demo ? demoAt : scorePlaying ? scoreAt : -1;
+  const done = demo ? demoAt : scorePlaying ? scoreAt : cursor;
   return (
     <div className="lyrics">
       <textarea
@@ -59,9 +63,9 @@ function Lyrics() {
         {syllables.map((s, i) => (
           <span key={i} className={`syl-wrap${s.wordEnd ? " word-end" : ""}`}>
             <button
-              className={`syl${!demo && i === cursor ? " next" : ""}${i === at ? " now" : ""}${i < done ? " sung" : ""}${s.melisma ? " held" : ""}`}
+              className={`syl${!demo && !scorePlaying && i === cursor ? " next" : ""}${i === at ? " now" : ""}${i < done ? " sung" : ""}${s.melisma ? " held" : ""}`}
               onClick={() => setCursor(i)}
-              aria-current={!demo && i === cursor ? "step" : undefined}
+              aria-current={!demo && !scorePlaying && i === cursor ? "step" : undefined}
               title={s.melisma ? "Held vowel: carries the previous syllable onto this note" : `Sing from “${s.text}”`}
             >
               {s.text}
@@ -142,12 +146,13 @@ export function SingRight() {
   // the pronouncing dictionary for the lyrics: here rather than on the mode switch, since the app
   // opens on Sing without one
   useEffect(ensureDictionary, []);
+  const [rollView, setRollView] = useState<"edit" | "live">("edit");
   const ring = useStore((s) => s.artic.epilarynx >= RING - 0.05);
   const next = useSing((s) => (s.demo ? null : (s.syllables[s.cursor]?.text ?? null)));
   return (
     <div className="right right-sing">
-      <Screen className="s-roll" title="Piano roll" sub="Notes and the pitch sung">
-        <PianoRoll />
+      <Screen className={`s-roll${rollView === "edit" ? " editing" : ""}`} title="Piano roll" sub={rollView === "edit" ? "Notes / automation" : "Notes and the pitch sung"} tools={<><Chip on={rollView === "edit"} onClick={() => setRollView("edit")}>Edit</Chip><Chip on={rollView === "live"} onClick={() => setRollView("live")}>Live</Chip></>}>
+        {rollView === "edit" ? <ScoreEditor /> : <PianoRoll />}
       </Screen>
       <Screen className="s-lyrics" title="Lyrics" sub="Each note sings the next syllable" tools={<DemoSongs />}>
         <Lyrics />

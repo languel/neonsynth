@@ -15,6 +15,7 @@ import { EXHALE_LABEL } from "../wasm/engine.ts";
 import { DEMO_SONGS } from "../wasm/engine.ts";
 import type { Gesture } from "../wasm/types.ts";
 import { nearestBody, type BodyMix } from "./body.ts";
+import { planScore, savedLyrics, saveLyrics, useSongScore } from "./songScore.ts";
 
 /** A note on the piano roll, on the voice clock (s); t1 is null while it is held. */
 export interface RollNote {
@@ -44,20 +45,32 @@ interface SingState {
   demo: string | null;
   /** index of the demo syllable being sung (−1: none yet) */
   demoAt: number;
+  /** Drawn score playback and its current sixteenth-note step / lyric. */
+  scorePlaying: boolean;
+  scoreStep: number;
+  scoreAt: number;
+  scoreError: string | null;
   setLyrics: (text: string) => void;
   setCursor: (i: number) => void;
   setVibrato: (cents: number) => void;
 }
 
+const initialLyrics = savedLyrics(DEFAULT_LYRICS);
 export const useSing = create<SingState>((set, get) => ({
-  lyrics: DEFAULT_LYRICS,
-  syllables: lyricsToSyllables(DEFAULT_LYRICS),
+  lyrics: initialLyrics,
+  syllables: lyricsToSyllables(initialLyrics),
   cursor: 0,
   vibrato: 35,
   demo: null,
   demoAt: -1,
+  scorePlaying: false,
+  scoreStep: -1,
+  scoreAt: -1,
+  scoreError: null,
   setLyrics: (text) => {
     stopDemo();
+    stopScore();
+    saveLyrics(text);
     set({ lyrics: text, syllables: lyricsToSyllables(text), cursor: 0 });
   },
   setCursor: (i) => set({ cursor: Math.max(0, Math.min(i, Math.max(0, get().syllables.length - 1))) }),
@@ -99,7 +112,7 @@ const written = (s: Syllable) => s.text + (s.wordEnd ? "" : "-");
  * the held key's. A melisma keeps its syllable's key, so the word stays while the pitch moves.
  */
 export function sungNow(): { key: unknown; text: string } | null {
-  const d = demoRun;
+  const d = demoRun ?? scoreRun;
   if (d) {
     if (d.offset === null) return null;
     const t = now() - d.offset;
@@ -176,6 +189,7 @@ function glide(midi: number, text: string): void {
 
 export function singNoteOn(midi: number, velocity: number, body: BodyMix): void {
   stopDemo();
+  stopScore();
   keys = keys.filter((k) => k !== midi).concat(midi);
   const st = useSing.getState();
   const syls = st.syllables.length ? st.syllables : [AH];
@@ -228,7 +242,11 @@ interface DemoRun {
   offset: number | null;
 }
 
+interface ScoreRun extends DemoRun { stepSeconds: number; start: number; syllableIndices: number[] }
 let demoRun: DemoRun | null = null;
+let scoreRun: ScoreRun | null = null;
+/** Cancels a score that is still waiting for the worklet or pronunciation dictionary. */
+let scoreToken = 0;
 /** bumped by every stop: a demo still waiting for audio or the dictionary then gives up */
 let demoToken = 0;
 /**
@@ -247,8 +265,8 @@ function endDemo(): void {
 }
 
 engine.onPlanned((m) => {
-  const d = demoRun;
-  if (!d || m.id !== d.id) return;
+  const d = demoRun?.id === m.id ? demoRun : scoreRun?.id === m.id ? scoreRun : null;
+  if (!d) return;
   d.offset = m.t0;
   d.times.forEach(([a, b], k) => addNote(d.midi[k], m.t0 + a, d.text[k], true, m.t0 + b - 0.02));
 });
@@ -292,6 +310,51 @@ export async function playDemo(name: string, body: BodyMix, ready?: () => Promis
   useSing.setState({ lyrics: song.lyrics, syllables: syl, cursor: 0, demo: song.name, demoAt: -1 });
 }
 
+/** Play the drawn score once, with the current lyrics assigned in chronological order. */
+export async function playScore(body: BodyMix, ready?: () => Promise<void>): Promise<void> {
+  stopSinging();
+  if (!useSongScore.getState().score.notes.length) {
+    useSing.setState({ scoreError: "Draw or add a note first." });
+    return;
+  }
+  const token = scoreToken;
+  useSing.setState({ scorePlaying: true, scoreStep: -1, scoreAt: -1, scoreError: null });
+  try {
+    await ready?.();
+    if (token !== scoreToken) return;
+    try { await g2p.load(); } catch { /* letter-to-sound rules */ }
+    if (token !== scoreToken) return;
+    const st = useSing.getState(), score = useSongScore.getState().score;
+    const syllables = lyricsToSyllables(st.lyrics);
+    const plan = planScore(score, syllables, body, st.vibrato);
+    if (!plan.notes.length) { useSing.setState({ scorePlaying: false, scoreError: "Draw or add a note first." }); return; }
+    const id = engine.schedule(plan);
+    const parent: number[] = [];
+    plan.syllables.forEach((s, i) => parent.push(s.melisma && i > 0 ? parent[i - 1] : i));
+    scoreRun = {
+      id, times: plan.times, midi: plan.notes.map(n => n.midi), text: plan.syllables.map(s => s.text),
+      shown: parent.map(p => written(plan.syllables[p])), parent, end: plan.end, offset: null,
+      stepSeconds: plan.stepSeconds, start: plan.start,
+      syllableIndices: plan.notes.map((_, i) => syllables.length ? i % syllables.length : -1),
+    };
+  } catch (error) {
+    if (token === scoreToken) useSing.setState({ scorePlaying: false, scoreError: error instanceof Error ? error.message : "Could not play this score." });
+  }
+}
+
+/** Cancel both a running score and one still starting. */
+export function stopScore(): void {
+  scoreToken++;
+  if (scoreRun) {
+    engine.stopSpeech();
+    const t = now();
+    roll.notes = roll.notes.filter(n => !(n.demo && n.t0 > t));
+    for (const n of roll.notes) if (n.demo && n.t1 !== null && n.t1 > t) n.t1 = t;
+    scoreRun = null;
+  }
+  if (useSing.getState().scorePlaying || useSing.getState().scoreStep !== -1) useSing.setState({ scorePlaying: false, scoreStep: -1, scoreAt: -1 });
+}
+
 function stopDemo(): void {
   demoToken++;
   const d = demoRun;
@@ -307,17 +370,34 @@ function stopDemo(): void {
 /** Called every frame while Sing mode is shown: follow the demo's progress. */
 export function tickSinging(): void {
   const d = demoRun;
-  if (!d || d.offset === null) return;
-  const t = now() - d.offset;
-  if (t > d.end + 0.4) return endDemo();
-  let k = -1;
-  while (k + 1 < d.times.length && d.times[k + 1][0] <= t) k++;
-  if (k !== useSing.getState().demoAt) useSing.setState({ demoAt: k });
+  if (d && d.offset !== null) {
+    const t = now() - d.offset;
+    if (t > d.end + 0.4) endDemo();
+    else {
+      let k = -1;
+      while (k + 1 < d.times.length && d.times[k + 1][0] <= t) k++;
+      if (k !== useSing.getState().demoAt) useSing.setState({ demoAt: k });
+    }
+  }
+  const score = scoreRun;
+  if (score && score.offset !== null) {
+    const t = now() - score.offset;
+    if (t > score.end + 0.2) {
+      scoreRun = null;
+      useSing.setState({ scorePlaying: false, scoreStep: -1, scoreAt: -1 });
+    } else {
+      const step = t < score.start ? -1 : Math.floor((t - score.start) / score.stepSeconds);
+      const note = score.times.findIndex(([a, b]) => t >= a && t < b);
+      const at = note < 0 ? -1 : score.syllableIndices[note];
+      if (step !== useSing.getState().scoreStep || at !== useSing.getState().scoreAt) useSing.setState({ scoreStep: step, scoreAt: at });
+    }
+  }
 }
 
 /** Stop everything sung (leaving Sing mode, changing body): demo, notes and endings. */
 export function stopSinging(): void {
   stopDemo();
+  stopScore();
   if (sounding) {
     engine.release(sounding.tag);
     engine.release(sounding.tag + 1);

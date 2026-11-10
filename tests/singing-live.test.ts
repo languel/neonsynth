@@ -42,7 +42,8 @@ const engineStub = new Proxy(
   { get: (t, k) => (k in t ? t[k as string] : () => {}), set: (t, k, v) => ((t[k as string] = v), true) },
 );
 mock.module("../src/audio/AudioEngine.ts", () => ({ engine: engineStub }));
-const { useSing, singNoteOn, singNoteOff, playDemo, stopSinging, tickSinging } = await import("../src/ui/singing.ts");
+const { useSing, singNoteOn, singNoteOff, playDemo, playScore, stopScore, stopSinging, tickSinging } = await import("../src/ui/singing.ts");
+const { blankScore, useSongScore } = await import("../src/ui/songScore.ts");
 const gesturesOf = () => voice.score();
 /** breath the score is giving now (strength-weighted activation of breath gestures) */
 const breathNow = () => {
@@ -190,6 +191,30 @@ describe("Sing mode, live keys", () => {
     sing().setLyrics("typed during the song");
     expect(sing().demo).toBeNull();
     expect(sing().lyrics).toBe("typed during the song");
+  });
+
+  test("a drawn score is cancelled while starting, and stops when live keys take over", async () => {
+    voice = new WasmVoice(FS);
+    useSongScore.getState().load({ ...blankScore(16), notes: [{id:"test", start:0, length:8, midi:48}] });
+    useSing.getState().setLyrics("ah");
+    let scheduled = 0;
+    const schedule = engineStub.schedule as typeof fakeEngine.schedule;
+    engineStub.schedule = (plan: { gestures: Gesture[] }) => (scheduled++, schedule(plan));
+    let go!: () => void;
+    const waiting = playScore(MALE, () => new Promise<void>(r => { go = r; }));
+    expect(useSing.getState().scorePlaying).toBe(true);
+    stopScore(); go(); await waiting;
+    expect(scheduled).toBe(0);
+    expect(useSing.getState().scorePlaying).toBe(false);
+    await playScore(MALE, () => Promise.resolve());
+    expect(scheduled).toBe(1);
+    planned({type:"planned",id:1,t0:voice.clock+.03,end:0});
+    run(.6); tickSinging();
+    expect(useSing.getState().scoreStep).toBeGreaterThanOrEqual(0);
+    singNoteOn(50,96,MALE);
+    expect(useSing.getState().scorePlaying).toBe(false);
+    singNoteOff(50,MALE); stopSinging();
+    engineStub.schedule = schedule;
   });
 
   test("a quick next note drops the last one's breath-out; leaving Sing cancels a pending ending", () => {
